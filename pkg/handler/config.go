@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/GeertJohan/yubigo"
+	"github.com/edwardzsmith/ldap"
 	"github.com/glauth/glauth/pkg/config"
 	"github.com/glauth/glauth/pkg/stats"
-	"github.com/nmcclain/ldap"
 	"github.com/op/go-logging"
 	"github.com/pquerna/otp/totp"
 )
@@ -33,29 +33,44 @@ func NewConfigHandler(log *logging.Logger, cfg *config.Config, yubikeyAuth *yubi
 //
 func (h configHandler) Bind(bindDN, bindSimplePw string, conn net.Conn) (resultCode ldap.LDAPResultCode, err error) {
 	bindDN = strings.ToLower(bindDN)
-	baseDN := strings.ToLower("," + h.cfg.Backend.BaseDN)
+	var baseDN string
 
 	h.log.Debug(fmt.Sprintf("Bind request: bindDN: %s, BaseDN: %s, source: %s", bindDN, h.cfg.Backend.BaseDN, conn.RemoteAddr().String()))
 
 	stats.Frontend.Add("bind_reqs", 1)
 
-	// parse the bindDN - ensure that the bindDN ends with the BaseDN
-	if !strings.HasSuffix(bindDN, baseDN) {
-		h.log.Warning(fmt.Sprintf("Bind Error: BindDN %s not our BaseDN %s", bindDN, h.cfg.Backend.BaseDN))
-		// h.log.Warning(fmt.Sprintf("Bind Error: BindDN %s not our BaseDN %s", bindDN, baseDN))
-		return ldap.LDAPResultInvalidCredentials, nil
-	}
-	parts := strings.Split(strings.TrimSuffix(bindDN, baseDN), ",")
-	groupName := ""
-	userName := ""
-	if len(parts) == 1 {
-		userName = strings.TrimPrefix(parts[0], h.cfg.Backend.NameFormat+"=")
-	} else if len(parts) == 2 {
-		userName = strings.TrimPrefix(parts[0], h.cfg.Backend.NameFormat+"=")
-		groupName = strings.TrimPrefix(parts[1], h.cfg.Backend.GroupFormat+"=")
+	var userName, groupName string
+	groupName = ""
+
+	if strings.Contains(bindDN, "@") {
+		userName = strings.Split(bindDN, "@")[0]
+		baseDN = strings.Replace(strings.Replace(strings.ToLower(h.cfg.Backend.BaseDN), "dc=", "", -1), ",", ".", -1)
+
+		// parse the bindDN - ensure that the bindDN ends with the BaseDN
+		if !strings.HasSuffix(bindDN, baseDN) {
+			h.log.Warning(fmt.Sprintf("Bind Error: BindDN %s not our BaseDN %s", bindDN, baseDN))
+			return ldap.LDAPResultInvalidCredentials, nil
+		}
+
 	} else {
-		h.log.Warning(fmt.Sprintf("Bind Error: BindDN %s should have only one or two parts (has %d)", bindDN, len(parts)))
-		return ldap.LDAPResultInvalidCredentials, nil
+		baseDN = strings.ToLower("," + h.cfg.Backend.BaseDN)
+		parts := strings.Split(strings.TrimSuffix(bindDN, baseDN), ",")
+
+		// parse the bindDN - ensure that the bindDN ends with the BaseDN
+		if !strings.HasSuffix(bindDN, baseDN) {
+			h.log.Warning(fmt.Sprintf("Bind Error: BindDN %s not our BaseDN %s", bindDN, baseDN))
+			return ldap.LDAPResultInvalidCredentials, nil
+		}
+
+		if len(parts) == 1 {
+			userName = strings.TrimPrefix(parts[0], h.cfg.Backend.NameFormat+"=")
+		} else if len(parts) == 2 {
+			userName = strings.TrimPrefix(parts[0], h.cfg.Backend.NameFormat+"=")
+			groupName = strings.TrimPrefix(parts[1], h.cfg.Backend.GroupFormat+"=")
+		} else {
+			h.log.Warning(fmt.Sprintf("Bind Error: BindDN %s should have only one or two parts (has %d)", bindDN, len(parts)))
+			return ldap.LDAPResultInvalidCredentials, nil
+		}
 	}
 
 	// find the user
@@ -71,23 +86,27 @@ func (h configHandler) Bind(bindDN, bindSimplePw string, conn net.Conn) (resultC
 		h.log.Warning(fmt.Sprintf("Bind Error: User %s not found.", userName))
 		return ldap.LDAPResultInvalidCredentials, nil
 	}
+
 	// find the group
-	group := config.Group{}
-	found = false
-	for _, g := range h.cfg.Groups {
-		if g.Name == groupName {
-			found = true
-			group = g
+
+	if groupName != "" {
+		group := config.Group{}
+		found = false
+		for _, g := range h.cfg.Groups {
+			if g.Name == groupName {
+				found = true
+				group = g
+			}
 		}
-	}
-	if !found {
-		h.log.Warning(fmt.Sprintf("Bind Error: Group %s not found.", groupName))
-		return ldap.LDAPResultInvalidCredentials, nil
-	}
-	// validate group membership
-	if user.PrimaryGroup != group.UnixID {
-		h.log.Warning(fmt.Sprintf("Bind Error: User %s primary group is not %s.", userName, groupName))
-		return ldap.LDAPResultInvalidCredentials, nil
+		if !found {
+			h.log.Warning(fmt.Sprintf("Bind Error: Group %s not found.", groupName))
+			return ldap.LDAPResultInvalidCredentials, nil
+		}
+		// validate group membership
+		if user.PrimaryGroup != group.UnixID {
+			h.log.Warning(fmt.Sprintf("Bind Error: User %s primary group is not %s.", userName, groupName))
+			return ldap.LDAPResultInvalidCredentials, nil
+		}
 	}
 
 	validotp := false
@@ -167,12 +186,18 @@ func (h configHandler) Bind(bindDN, bindSimplePw string, conn net.Conn) (resultC
 //
 func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn net.Conn) (result ldap.ServerSearchResult, err error) {
 	bindDN = strings.ToLower(bindDN)
-	baseDN := strings.ToLower("," + h.cfg.Backend.BaseDN)
-	searchBaseDN := strings.ToLower(searchReq.BaseDN)
+	var baseDN, searchBaseDN string
+	if strings.Contains(bindDN, "@") {
+		baseDN = strings.Replace(strings.Replace(strings.ToLower(h.cfg.Backend.BaseDN), "dc=", "", -1), ",", ".", -1)
+	} else {
+		baseDN = strings.ToLower("," + h.cfg.Backend.BaseDN)
+	}
+	searchBaseDN = strings.ToLower(searchReq.BaseDN)
 	h.log.Debug(fmt.Sprintf("Search request as %s from %s for %s", bindDN, conn.RemoteAddr().String(), searchReq.Filter))
 	stats.Frontend.Add("search_reqs", 1)
 
 	// validate the user is authenticated and has appropriate access
+
 	if len(bindDN) < 1 {
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultInsufficientAccessRights}, fmt.Errorf("Search Error: Anonymous BindDN not allowed %s", bindDN)
 	}
@@ -182,15 +207,44 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 	if !strings.HasSuffix(searchBaseDN, h.cfg.Backend.BaseDN) {
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultInsufficientAccessRights}, fmt.Errorf("Search Error: search BaseDN %s is not in our BaseDN %s", searchBaseDN, h.cfg.Backend.BaseDN)
 	}
+
 	// return all users in the config file - the LDAP library will filter results for us
 	entries := []*ldap.Entry{}
-	filterEntity, err := ldap.GetFilterObjectClass(searchReq.Filter)
-	if err != nil {
-		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: error parsing filter: %s", searchReq.Filter)
+
+	var filterEntity string
+
+	switch searchReq.Filter {
+	case "(&(objectClass=Group)(groupType=-2147483646))":
+		filterEntity = "group"
+	case "(&(objectClass=organizationalUnit))":
+		filterEntity = "organizationalUnit"
+	default:
+		filterEntity, err = ldap.GetFilterObjectClass(searchReq.Filter)
+		if err != nil {
+			return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: error parsing filter: %s", searchReq.Filter)
+		}
 	}
+
 	switch filterEntity {
 	default:
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: unhandled filter type: %s [%s]", filterEntity, searchReq.Filter)
+	case "organizationalUnit":
+		dn := fmt.Sprintf("ou=Staff,dc=%s", h.cfg.Backend.BaseDN)
+		entries = append(entries, &ldap.Entry{DN: dn, Attributes: []*ldap.EntryAttribute{}})
+	case "group":
+		for _, g := range h.cfg.Groups {
+			attrs := []*ldap.EntryAttribute{}
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{g.Name}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", g.Name)}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountName", Values: []string{fmt.Sprintf("%s", g.Name)}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", g.UnixID)}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"Group"}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "uniqueMember", Values: h.getGroupMembers(g.UnixID)})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "memberUid", Values: h.getGroupMemberIDs(g.UnixID)})
+			dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
+			entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
+		}
 	case "posixgroup":
 		for _, g := range h.cfg.Groups {
 			attrs := []*ldap.EntryAttribute{}
@@ -270,7 +324,6 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 	return ldap.ServerSearchResult{Entries: entries, Referrals: []string{}, Controls: []ldap.Control{}, ResultCode: ldap.LDAPResultSuccess}, nil
 }
 
-//
 func (h configHandler) Close(boundDn string, conn net.Conn) error {
 	stats.Frontend.Add("closes", 1)
 	return nil

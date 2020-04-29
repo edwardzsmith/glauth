@@ -1,6 +1,6 @@
 package handler
 
-import "github.com/nmcclain/ldap"
+import "github.com/edwardzsmith/ldap"
 
 // interface for backend handler
 type Handler interface {

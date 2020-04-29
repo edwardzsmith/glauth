@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edwardzsmith/ldap"
 	"github.com/glauth/glauth/pkg/config"
 	"github.com/glauth/glauth/pkg/stats"
 	"github.com/kr/pretty"
-	"github.com/nmcclain/ldap"
 	"github.com/op/go-logging"
 )
 
@@ -135,6 +135,7 @@ func (h ldapHandler) Search(boundDN string, searchReq ldap.SearchRequest, conn n
 	h.log.Debug(fmt.Sprintf("AP: Search OK: %s -> num of entries = %d\n", search.Filter, len(ssr.Entries)))
 	return ssr, nil
 }
+
 func (h ldapHandler) Close(boundDn string, conn net.Conn) error {
 	conn.Close() // close connection to the server when then client is closed
 	h.lock.Lock()
