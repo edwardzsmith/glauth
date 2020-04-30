@@ -211,7 +211,7 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 	// return all users in the config file - the LDAP library will filter results for us
 	entries := []*ldap.Entry{}
 
-	var filterEntity string
+	var filterEntity, sAMAccountName string
 
 	switch searchReq.Filter {
 	case "(&(objectClass=Group)(groupType=-2147483646))":
@@ -219,7 +219,14 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 	case "(&(objectClass=organizationalUnit))":
 		filterEntity = "organizationalUnit"
 	default:
-		filterEntity, err = ldap.GetFilterObjectClass(searchReq.Filter)
+		if strings.Contains(searchReq.Filter, "sAMAccountName") {
+			filterEntity = "posixaccount"
+			if strings.Contains(searchReq.Filter, "sAMAccountName=\x04\b") {
+				sAMAccountName = strings.Replace(strings.Split(searchReq.Filter, "sAMAccountName=\x04\b")[1], "))", "", 1)
+			}
+		} else {
+			filterEntity, err = ldap.GetFilterObjectClass(searchReq.Filter)
+		}
 		if err != nil {
 			return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: error parsing filter: %s", searchReq.Filter)
 		}
@@ -250,6 +257,7 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 			attrs := []*ldap.EntryAttribute{}
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{g.Name}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountNamecustomer", Values: []string{g.Name}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", g.Name)}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", g.UnixID)}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"posixGroup"}})
@@ -258,65 +266,70 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 			dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
 			entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
 		}
-	case "posixaccount", "":
+	case "posixaccount":
 		for _, u := range h.cfg.Users {
-			attrs := []*ldap.EntryAttribute{}
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{u.Name}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{u.Name}})
+			if u.Name == sAMAccountName {
 
-			if len(u.GivenName) > 0 {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "givenName", Values: []string{u.GivenName}})
+				attrs := []*ldap.EntryAttribute{}
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{u.Name}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{u.Name}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "displayName", Values: []string{u.Name}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectSid", Values: []string{u.Name}})
+
+				if len(u.GivenName) > 0 {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "givenName", Values: []string{u.GivenName}})
+				}
+
+				if len(u.SN) > 0 {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "sn", Values: []string{u.SN}})
+				}
+
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "ou", Values: []string{h.getGroupName(u.PrimaryGroup)}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "uidNumber", Values: []string{fmt.Sprintf("%d", u.UnixID)}})
+
+				if u.Disabled {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "accountStatus", Values: []string{"inactive"}})
+				} else {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "accountStatus", Values: []string{"active"}})
+				}
+
+				if len(u.Mail) > 0 {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "mail", Values: []string{u.Mail}})
+				}
+
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"posixAccount", "shadowAccount"}})
+
+				if len(u.LoginShell) > 0 {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "loginShell", Values: []string{u.LoginShell}})
+				} else {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "loginShell", Values: []string{"/bin/bash"}})
+				}
+
+				if len(u.Homedir) > 0 {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "homeDirectory", Values: []string{u.Homedir}})
+				} else {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: "homeDirectory", Values: []string{"/home/" + u.Name}})
+				}
+
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", u.Name)}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "gecos", Values: []string{fmt.Sprintf("%s", u.Name)}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", u.PrimaryGroup)}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "memberOf", Values: h.getGroupDNs(append(u.OtherGroups, u.PrimaryGroup))})
+
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowExpire", Values: []string{"-1"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowFlag", Values: []string{"134538308"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowInactive", Values: []string{"-1"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowLastChange", Values: []string{"11000"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowMax", Values: []string{"99999"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowMin", Values: []string{"-1"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowWarning", Values: []string{"7"}})
+
+				if len(u.SSHKeys) > 0 {
+					attrs = append(attrs, &ldap.EntryAttribute{Name: h.cfg.Backend.SSHKeyAttr, Values: u.SSHKeys})
+				}
+				dn := fmt.Sprintf("%s=%s,%s=%s,%s", h.cfg.Backend.NameFormat, u.Name, h.cfg.Backend.GroupFormat, h.getGroupName(u.PrimaryGroup), h.cfg.Backend.BaseDN)
+				entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
 			}
-
-			if len(u.SN) > 0 {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "sn", Values: []string{u.SN}})
-			}
-
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "ou", Values: []string{h.getGroupName(u.PrimaryGroup)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "uidNumber", Values: []string{fmt.Sprintf("%d", u.UnixID)}})
-
-			if u.Disabled {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "accountStatus", Values: []string{"inactive"}})
-			} else {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "accountStatus", Values: []string{"active"}})
-			}
-
-			if len(u.Mail) > 0 {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "mail", Values: []string{u.Mail}})
-			}
-
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"posixAccount", "shadowAccount"}})
-
-			if len(u.LoginShell) > 0 {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "loginShell", Values: []string{u.LoginShell}})
-			} else {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "loginShell", Values: []string{"/bin/bash"}})
-			}
-
-			if len(u.Homedir) > 0 {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "homeDirectory", Values: []string{u.Homedir}})
-			} else {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "homeDirectory", Values: []string{"/home/" + u.Name}})
-			}
-
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", u.Name)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "gecos", Values: []string{fmt.Sprintf("%s", u.Name)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", u.PrimaryGroup)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "memberOf", Values: h.getGroupDNs(append(u.OtherGroups, u.PrimaryGroup))})
-
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowExpire", Values: []string{"-1"}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowFlag", Values: []string{"134538308"}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowInactive", Values: []string{"-1"}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowLastChange", Values: []string{"11000"}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowMax", Values: []string{"99999"}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowMin", Values: []string{"-1"}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowWarning", Values: []string{"7"}})
-
-			if len(u.SSHKeys) > 0 {
-				attrs = append(attrs, &ldap.EntryAttribute{Name: h.cfg.Backend.SSHKeyAttr, Values: u.SSHKeys})
-			}
-			dn := fmt.Sprintf("%s=%s,%s=%s,%s", h.cfg.Backend.NameFormat, u.Name, h.cfg.Backend.GroupFormat, h.getGroupName(u.PrimaryGroup), h.cfg.Backend.BaseDN)
-			entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
 		}
 	}
 	stats.Frontend.Add("search_successes", 1)
