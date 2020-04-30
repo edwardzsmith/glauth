@@ -232,6 +232,8 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 		}
 	}
 
+	// h.log.Warning("filterEntity: %s", filterEntity)
+
 	switch filterEntity {
 	default:
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: unhandled filter type: %s [%s]", filterEntity, searchReq.Filter)
@@ -239,18 +241,29 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 		dn := fmt.Sprintf("ou=Staff,dc=%s", h.cfg.Backend.BaseDN)
 		entries = append(entries, &ldap.Entry{DN: dn, Attributes: []*ldap.EntryAttribute{}})
 	case "group":
+		var groupName string
+		// (&(objectClass=Group)(groupType=-2147483646)(|(DistinguishedName=cn=users,ou=groups,dc=localhost,dc=net)))
+		if strings.Contains(searchReq.Filter, "DistinguishedName=") {
+			groupName = strings.Replace(strings.Split(strings.Split(searchReq.Filter, "DistinguishedName=")[1], ",")[0], "cn=", "", 1)
+
+			h.log.Infof("groupName: %q", groupName)
+		}
 		for _, g := range h.cfg.Groups {
-			attrs := []*ldap.EntryAttribute{}
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{g.Name}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", g.Name)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountName", Values: []string{fmt.Sprintf("%s", g.Name)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", g.UnixID)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"Group"}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "uniqueMember", Values: h.getGroupMembers(g.UnixID)})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "memberUid", Values: h.getGroupMemberIDs(g.UnixID)})
-			dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
-			entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
+			h.log.Infof("groupName: %q != g.Name: %q", groupName, g.Name)
+			if groupName == g.Name {
+				attrs := []*ldap.EntryAttribute{}
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{g.Name}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", g.Name)}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountName", Values: []string{fmt.Sprintf("%s", g.Name)}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", g.UnixID)}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"Group"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "uniqueMember", Values: h.getGroupMembers(g.UnixID)})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "memberUid", Values: h.getGroupMemberIDs(g.UnixID)})
+				dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
+				entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
+			}
+			h.log.Warning(entries)
 		}
 	case "posixgroup":
 		for _, g := range h.cfg.Groups {
