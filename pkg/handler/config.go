@@ -250,7 +250,7 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 		}
 		for _, g := range h.cfg.Groups {
 			h.log.Infof("groupName: %q != g.Name: %q", groupName, g.Name)
-			if groupName == g.Name {
+			if groupName == g.Name || groupName == "" {
 				attrs := []*ldap.EntryAttribute{}
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{g.Name}})
@@ -287,7 +287,10 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{u.Name}})
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{u.Name}})
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "displayName", Values: []string{u.Name}})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectSid", Values: []string{u.Name}})
+
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectSid", Values: []string{"S-1-5-21-977923109-2952828257-175163757-387119"}})
+
+				// attrs = append(attrs, &ldap.EntryAttribute{Name: "objectSid", Values: []string{"\x01\x05\x00\x00\x00\x00\x00\x05\x15\x00\x00\x00ߎ϶\x87\x05S\xd6\xd2G\xb2\xd2[4\x00\x00"}})
 
 				if len(u.GivenName) > 0 {
 					attrs = append(attrs, &ldap.EntryAttribute{Name: "givenName", Values: []string{u.GivenName}})
