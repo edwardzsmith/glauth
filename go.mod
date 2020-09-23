@@ -4,6 +4,8 @@ go 1.13
 
 replace github.com/edwardzsmith/ldap => /Users/edwardsmith/go/src/github.com/edwardzsmith/ldap
 
+replace github.com/nmcclain/asn1-ber => /Users/edwardsmith/go/src/github.com/edwardzsmith/asn1-ber
+
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/GeertJohan/yubigo v0.0.0-20190917122436-175bc097e60e
@@ -17,7 +19,7 @@ require (
 	github.com/nmcclain/ldap v0.0.0-20191021200707-3b3b69a7e9e3
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/pquerna/otp v1.2.0
-	github.com/sirupsen/logrus v1.5.0
+	github.com/sirupsen/logrus v1.6.0
 	github.com/yaegashi/msgraph.go v0.1.1-0.20200221123608-2d438cf2a7cc
 	golang.org/x/sys v0.0.0-20200219091948-cb0a6d8edb6c // indirect
 	gopkg.in/amz.v1 v1.0.0-20150111123259-ad23e96a31d2
