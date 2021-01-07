@@ -19,11 +19,6 @@ import (
 )
 
 func (h configHandler) getObjectSID(userID int) []byte {
-
-	h.log.Info(userID)
-
-	// b64sid := `AQUAAAAAAAUVAAAArC22DNydmGz4WUTnUAQAAA==`
-	// b64sid := `AQEAAAAAAALfx3D2AAA=`
 	buf := new(bytes.Buffer)
 
 	var revision, count int8
@@ -237,35 +232,16 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 
 	// return all users in the config file - the LDAP library will filter results for us
 	entries := []*ldap.Entry{}
-
 	var filterEntity, sAMAccountName string
 
-	h.log.Warningf("searchReq.Filter: %q", searchReq.Filter)
-
-	switch searchReq.Filter {
-	case "(&(objectClass=Group)(groupType=-2147483646))":
-		filterEntity = "group"
-	case "(&(objectClass=organizationalUnit))":
-		filterEntity = "organizationalUnit"
-	default:
-		if strings.Contains(searchReq.Filter, "sAMAccountName") {
-			filterEntity = "posixaccount"
-			if strings.Contains(searchReq.Filter, "sAMAccountName=\x04\b") {
-				sAMAccountName = strings.Replace(strings.Split(searchReq.Filter, "sAMAccountName=\x04\b")[1], "))", "", 1)
-			} else if strings.Contains(searchReq.Filter, "sAMAccountName=\x04\b") {
-				sAMAccountName = strings.Replace(strings.Split(searchReq.Filter, "sAMAccountName=\x04\t")[1], "))", "", 1)
-			} else {
-				sAMAccountName = strings.Replace(strings.Split(searchReq.Filter, "sAMAccountName=")[1], "))", "", 1)
-			}
-		} else {
-			filterEntity, err = ldap.GetFilterObjectClass(searchReq.Filter)
-		}
-		if err != nil {
-			return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: error parsing filter: %s", searchReq.Filter)
-		}
+	filterEntity, err = ldap.GetFilterObjectClass(searchReq.Filter)
+	if err != nil {
+		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: error parsing filter: %s", searchReq.Filter)
 	}
 
-	h.log.Errorf("sAMAccountName: %q", sAMAccountName)
+	if strings.Contains(searchReq.Filter, "sAMAccountName") {
+		sAMAccountName = strings.Replace(strings.Split(searchReq.Filter, "sAMAccountName=")[1], "))", "", 1)
+	}
 
 	switch filterEntity {
 	default:
@@ -275,15 +251,10 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 		entries = append(entries, &ldap.Entry{DN: dn, Attributes: []*ldap.EntryAttribute{}})
 	case "group":
 		var groupName string
-		// (&(objectClass=Group)(groupType=-2147483646)(|(DistinguishedName=cn=users,ou=groups,dc=localhost,dc=net)))
 		if strings.Contains(searchReq.Filter, "DistinguishedName=") {
 			groupName = strings.Replace(strings.Split(strings.Split(searchReq.Filter, "DistinguishedName=")[1], ",")[0], "cn=", "", 1)
-
-			h.log.Infof("searchReq.Filter: %q", searchReq.Filter)
-			h.log.Infof("groupName: %q", groupName)
 		}
 		for _, g := range h.cfg.Groups {
-			h.log.Infof("groupName: %q != g.Name: %q", groupName, g.Name)
 			if groupName == g.Name || groupName == "" {
 				attrs := []*ldap.EntryAttribute{}
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
@@ -297,7 +268,6 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 				dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
 				entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
 			}
-			h.log.Warning(entries)
 		}
 	case "posixgroup":
 		for _, g := range h.cfg.Groups {
@@ -313,26 +283,14 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 			dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
 			entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
 		}
-	case "posixaccount":
-		h.log.Info("Yolo")
+	case "posixaccount", "user":
 		for _, u := range h.cfg.Users {
-			h.log.Info(u.Name)
-			h.log.Info(sAMAccountName)
-			h.log.Info(u.Name == sAMAccountName)
 			if u.Name == sAMAccountName {
 
 				attrs := []*ldap.EntryAttribute{}
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{u.Name}})
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{u.Name}})
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "displayName", Values: []string{u.Name}})
-
-				// attrs = append(attrs, &ldap.EntryAttribute{Name: "objectSid", Values: []string{"S-1-5-21-977923109-2952828257-175163757-387119"}})
-
-				// b64sid := `AQUAAAAAAAUVAAAArC22DNydmGz4WUTnUAQAAA==`
-				// b64sid := `AQEAAAAAAALfx3D2AAA=`
-				// bsid, _ := base64.StdEncoding.DecodeString(b64sid)
-				// h.log.Warning(string(bsid))
-
 				objectSID := h.getObjectSID(u.UnixID)
 
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectSid", Values: []string{string(objectSID)}})
@@ -393,9 +351,7 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 			}
 		}
 	}
-	h.log.Warning(entries)
 	stats.Frontend.Add("search_successes", 1)
-	h.log.Debug(fmt.Sprintf("AP: Search OK: %s", searchReq.Filter))
 	return ldap.ServerSearchResult{Entries: entries, Referrals: []string{}, Controls: []ldap.Control{}, ResultCode: ldap.LDAPResultSuccess}, nil
 }
 
