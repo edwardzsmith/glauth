@@ -37,7 +37,7 @@ func NewServer(log *logging.Logger, cfg *config.Config) (*LdapSvc, error) {
 
 	// configure the backend
 	s.l = ldap.NewServer()
-	s.l.EnforceLDAP = false
+	s.l.EnforceLDAP = true
 	var h handler.Handler
 	switch cfg.Backend.Datastore {
 	case "ldap":

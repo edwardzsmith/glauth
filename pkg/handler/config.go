@@ -246,41 +246,23 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 	switch filterEntity {
 	default:
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError}, fmt.Errorf("Search Error: unhandled filter type: %s [%s]", filterEntity, searchReq.Filter)
-	case "organizationalUnit":
+	case "organizationalunit":
 		dn := fmt.Sprintf("ou=Staff,dc=%s", h.cfg.Backend.BaseDN)
 		entries = append(entries, &ldap.Entry{DN: dn, Attributes: []*ldap.EntryAttribute{}})
-	case "group":
-		var groupName string
-		if strings.Contains(searchReq.Filter, "DistinguishedName=") {
-			groupName = strings.Replace(strings.Split(strings.Split(searchReq.Filter, "DistinguishedName=")[1], ",")[0], "cn=", "", 1)
-		}
-		for _, g := range h.cfg.Groups {
-			if groupName == g.Name || groupName == "" {
-				attrs := []*ldap.EntryAttribute{}
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{g.Name}})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", g.Name)}})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountName", Values: []string{fmt.Sprintf("%s", g.Name)}})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", g.UnixID)}})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"Group"}})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "uniqueMember", Values: h.getGroupMembers(g.UnixID)})
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "memberUid", Values: h.getGroupMemberIDs(g.UnixID)})
-				dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
-				entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
-			}
-		}
-	case "posixgroup":
+	case "posixgroup", "group":
 		for _, g := range h.cfg.Groups {
 			attrs := []*ldap.EntryAttribute{}
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "cn", Values: []string{g.Name}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "uid", Values: []string{g.Name}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountNamecustomer", Values: []string{g.Name}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountName", Values: []string{g.Name}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "groupType", Values: []string{g.GroupType}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "description", Values: []string{fmt.Sprintf("%s", g.Name)}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "gidNumber", Values: []string{fmt.Sprintf("%d", g.UnixID)}})
-			attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"posixGroup"}})
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"posixGroup", "group"}})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "uniqueMember", Values: h.getGroupMembers(g.UnixID)})
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "memberUid", Values: h.getGroupMemberIDs(g.UnixID)})
 			dn := fmt.Sprintf("cn=%s,%s=groups,%s", g.Name, h.cfg.Backend.GroupFormat, h.cfg.Backend.BaseDN)
+			attrs = append(attrs, &ldap.EntryAttribute{Name: "DistinguishedName", Values: []string{dn}})
 			entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
 		}
 	case "posixaccount", "user":
@@ -316,7 +298,7 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 					attrs = append(attrs, &ldap.EntryAttribute{Name: "mail", Values: []string{u.Mail}})
 				}
 
-				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"posixAccount", "shadowAccount"}})
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"posixAccount", "shadowAccount", "user"}})
 
 				if len(u.LoginShell) > 0 {
 					attrs = append(attrs, &ldap.EntryAttribute{Name: "loginShell", Values: []string{u.LoginShell}})
@@ -342,6 +324,8 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowMax", Values: []string{"99999"}})
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowMin", Values: []string{"-1"}})
 				attrs = append(attrs, &ldap.EntryAttribute{Name: "shadowWarning", Values: []string{"7"}})
+
+				attrs = append(attrs, &ldap.EntryAttribute{Name: "sAMAccountName", Values: []string{u.Name}})
 
 				if len(u.SSHKeys) > 0 {
 					attrs = append(attrs, &ldap.EntryAttribute{Name: h.cfg.Backend.SSHKeyAttr, Values: u.SSHKeys})
