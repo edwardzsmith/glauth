@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/edwardzsmith/ldap"
-	"github.com/glauth/glauth/pkg/config"
-	"github.com/glauth/glauth/pkg/stats"
+	"github.com/edwardzsmith/glauth/pkg/config"
+	"github.com/edwardzsmith/glauth/pkg/stats"
 	"github.com/kr/pretty"
 	"github.com/op/go-logging"
 )

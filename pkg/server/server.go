@@ -6,8 +6,8 @@ import (
 
 	"github.com/GeertJohan/yubigo"
 	"github.com/edwardzsmith/ldap"
-	"github.com/glauth/glauth/pkg/config"
-	"github.com/glauth/glauth/pkg/handler"
+	"github.com/edwardzsmith/glauth/pkg/config"
+	"github.com/edwardzsmith/glauth/pkg/handler"
 	"github.com/op/go-logging"
 )
 

@@ -2,7 +2,7 @@
 Go-lang LDAP Authentication (GLAuth) is a secure, easy-to-use, LDAP server w/ configurable backends.
 
 [![Travis Build - Master](https://img.shields.io/travis/glauth/glauth.svg)](https://travis-ci.org/glauth/glauth)
-[![Last Commit](https://img.shields.io/github/last-commit/glauth/glauth.svg)](https://github.com/glauth/glauth/graphs/commit-activity)
+[![Last Commit](https://img.shields.io/github/last-commit/glauth/glauth.svg)](https://github.com/edwardzsmith/glauth/graphs/commit-activity)
 
 [![](https://img.shields.io/docker/build/glauth/glauth.svg)](https://hub.docker.com/r/glauth/glauth/)
 [![DockerHub Image Size](https://img.shields.io/microbadger/image-size/glauth/glauth.svg)](https://hub.docker.com/r/glauth/glauth/)
@@ -25,8 +25,8 @@ Please base all PRs on [dev](https://github.com/nmcclain/glauth/tree/dev), not m
 ### Quickstart
 This quickstart is a great way to try out GLAuth in a non-production environment.  *Be warned that you should take the extra steps to setup SSL (TLS) for production use!*
 
-1. Download a precompiled binary from the [releases](https://github.com/glauth/glauth/releases) page.
-2. Download the [example config file](https://github.com/glauth/glauth/blob/master/sample-simple.cfg).
+1. Download a precompiled binary from the [releases](https://github.com/edwardzsmith/glauth/releases) page.
+2. Download the [example config file](https://github.com/edwardzsmith/glauth/blob/master/sample-simple.cfg).
 3. Start the GLAuth server, referencing the path to the desired config file with `-c`.
    - `sudo ./glauth64 -c sample-simple.cfg`
 4. Test with traditional LDAP tools
@@ -94,7 +94,7 @@ In order to use S3, you must set your AWS credentials.  Either:
 1. set the -K and -S command-line flags  **OR**
 2. set the AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables.
 
-More configuration options are documented here: https://github.com/glauth/glauth/blob/master/sample-simple.cfg
+More configuration options are documented here: https://github.com/edwardzsmith/glauth/blob/master/sample-simple.cfg
 
 ### Required Fields
  * Name

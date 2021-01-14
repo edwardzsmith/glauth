@@ -1,4 +1,4 @@
-module github.com/glauth/glauth
+module github.com/edwardzsmith/glauth
 
 go 1.13
 
