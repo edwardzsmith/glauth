@@ -57,6 +57,7 @@ type Group struct {
 	Name          string
 	UnixID        int
 	IncludeGroups []int
+	GroupType     string
 }
 type Config struct {
 	API                API

@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/GeertJohan/yubigo"
+	"github.com/edwardzsmith/ldap"
 	"github.com/glauth/glauth/pkg/config"
 	"github.com/glauth/glauth/pkg/handler"
-	"github.com/nmcclain/ldap"
 	"github.com/op/go-logging"
 )
 
@@ -50,6 +50,7 @@ func NewServer(log *logging.Logger, cfg *config.Config) (*LdapSvc, error) {
 		return nil, fmt.Errorf("unsupported backend %s - must be 'config' or 'ldap'", cfg.Backend.Datastore)
 	}
 	log.Notice(fmt.Sprintf("Using %s backend", cfg.Backend.Datastore))
+
 	s.l.BindFunc("", h)
 	s.l.SearchFunc("", h)
 	s.l.CloseFunc("", h)
