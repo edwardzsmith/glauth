@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/edwardzsmith/ldap"
 	"github.com/edwardzsmith/glauth/pkg/config"
 	"github.com/edwardzsmith/glauth/pkg/stats"
+	"github.com/edwardzsmith/ldap"
 	"github.com/op/go-logging"
 	msgraph "github.com/yaegashi/msgraph.go/v1.0"
 )

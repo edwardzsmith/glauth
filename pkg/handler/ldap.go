@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/edwardzsmith/ldap"
 	"github.com/edwardzsmith/glauth/pkg/config"
 	"github.com/edwardzsmith/glauth/pkg/stats"
+	"github.com/edwardzsmith/ldap"
 	"github.com/kr/pretty"
 	"github.com/op/go-logging"
 )

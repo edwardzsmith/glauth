@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/GeertJohan/yubigo"
-	"github.com/edwardzsmith/ldap"
 	"github.com/edwardzsmith/glauth/pkg/config"
 	"github.com/edwardzsmith/glauth/pkg/handler"
+	"github.com/edwardzsmith/ldap"
 	"github.com/op/go-logging"
 )
 

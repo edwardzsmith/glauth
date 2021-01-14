@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"github.com/GeertJohan/yubigo"
-	"github.com/edwardzsmith/ldap"
 	"github.com/edwardzsmith/glauth/pkg/config"
 	"github.com/edwardzsmith/glauth/pkg/stats"
+	"github.com/edwardzsmith/ldap"
 	"github.com/op/go-logging"
 	"github.com/pquerna/otp/totp"
 )
